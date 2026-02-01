@@ -28,7 +28,7 @@ def load_model(path: str):
     if not p.exists():
         raise FileNotFoundError(
             f"File model tidak ditemukan: {path}. "
-            "Pastikan best_fraud_model.joblib ada di folder yang sama dengan app.py."
+            "Pastikan fraud_model.joblib ada di folder yang sama dengan app.py."
         )
     return joblib.load(p)
 
