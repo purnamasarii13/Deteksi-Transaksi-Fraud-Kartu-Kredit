@@ -12,7 +12,7 @@ st.caption(
     "Prediksi memakai model terbaik dari notebook (LR/XGBoost) + threshold terbaik."
 )
 
-MODEL_PATH = "best_fraud_model.joblib"
+MODEL_PATH = "fraud_model.joblib"
 THRESH_PATH = "best_threshold.txt"
 DATA_PATH = "creditcard.csv"   # dataset untuk autofill & label asli (kalau ada)
 
