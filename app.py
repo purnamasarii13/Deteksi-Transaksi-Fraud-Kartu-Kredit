@@ -7,20 +7,21 @@ from pathlib import Path
 
 st.set_page_config(page_title="Deteksi Fraud Kartu Kredit", layout="wide")
 st.title("Deteksi Transaksi Fraud Kartu Kredit")
+
 st.caption(
     "Upload CSV atau input manual + autofill dari baris dataset + tampil label asli dataset (jika ada). "
-    "Prediksi memakai model terbaik dari notebook (LR/XGBoost) + threshold terbaik."
+    "Prediksi memakai model terbaik dari notebook (LR/XGBoost) dengan default decision rule "
+    "(sesuai ipynb: TANPA threshold tuning)."
 )
 
 MODEL_PATH = "fraud_model.joblib"
-THRESH_PATH = "best_threshold.txt"
-DATA_PATH = "creditcard.csv"   # dataset untuk autofill & label asli (kalau ada)
+DATA_PATH = "creditcard.csv"  # dataset untuk autofill & label asli (kalau ada)
 
 # Label mapping (sesuai permintaan: non-fraud bukan normal)
 LABEL_MAP = {0: "Non-Fraud (0)", 1: "Fraud (1)"}
 
 # =========================
-# Load model, threshold, data
+# Load model & data
 # =========================
 @st.cache_resource
 def load_model(path: str):
@@ -31,23 +32,6 @@ def load_model(path: str):
             "Pastikan fraud_model.joblib ada di folder yang sama dengan app.py."
         )
     return joblib.load(p)
-
-@st.cache_data
-def load_threshold(path: str) -> float:
-    p = Path(path)
-    if not p.exists():
-        raise FileNotFoundError(
-            f"File threshold tidak ditemukan: {path}. "
-            "Pastikan best_threshold.txt ada di folder yang sama dengan app.py."
-        )
-    try:
-        val = float(p.read_text().strip())
-    except Exception:
-        raise ValueError(f"Isi {path} tidak valid. Harus berupa angka float (contoh: 0.23).")
-
-    if not (0.0 < val < 1.0):
-        raise ValueError(f"Nilai threshold di {path} harus di antara 0 dan 1.")
-    return val
 
 @st.cache_data
 def load_data_raw(path: str) -> pd.DataFrame:
@@ -65,15 +49,8 @@ except Exception as e:
     st.error(f"Gagal load model: {e}")
     st.stop()
 
-try:
-    threshold = load_threshold(THRESH_PATH)
-except Exception as e:
-    st.error(f"Gagal load threshold: {e}")
-    st.stop()
-
-
 # =========================
-# Kolom fitur yang DIPAKAI model
+# Kolom fitur yang DIPAKAI model (sesuai notebook creditcard.csv)
 # =========================
 needed = ["Time"] + [f"V{i}" for i in range(1, 29)] + ["Amount"]
 
@@ -97,9 +74,9 @@ try:
     missing = [c for c in needed if c not in df_feat.columns]
     if missing:
         st.error(
-            f"Dataset untuk autofill tidak sesuai kolom model.\n"
+            "Dataset untuk autofill tidak sesuai kolom model.\n"
             f"Kolom yang hilang: {missing}\n\n"
-            f"Pastikan dataset creditcard.csv punya kolom Time, V1..V28, Amount."
+            "Pastikan dataset creditcard.csv punya kolom Time, V1..V28, Amount."
         )
         st.stop()
 
@@ -130,7 +107,7 @@ def apply_row_to_session(row: pd.Series, columns: list[str]):
                 st.session_state[c] = 0.0
 
 # =========================
-# Helper: predict df
+# Helper: predict df (SESUI IPYNB: TANPA THRESHOLD)
 # =========================
 def predict_df(df_in: pd.DataFrame):
     # pastikan urutan kolom sesuai model
@@ -141,9 +118,12 @@ def predict_df(df_in: pd.DataFrame):
         df_in[c] = pd.to_numeric(df_in[c], errors="coerce")
     df_in = df_in.fillna(0)
 
-    # proba untuk kelas positif (fraud=1)
+    # proba kelas positif (fraud=1)
     proba = model.predict_proba(df_in)[:, 1]
-    pred = (proba >= threshold).astype(int)
+
+    # kelas prediksi (default decision rule sesuai notebook: model.predict)
+    pred = model.predict(df_in).astype(int)
+
     return pred, proba
 
 # =========================
@@ -183,19 +163,16 @@ with tab1:
             st.stop()
         if extra:
             st.warning(f"Ada kolom ekstra, akan diabaikan: {extra}")
+
         df_in = df_in[needed]
 
         st.write("Preview data input:")
         st.dataframe(df_in.head(20), use_container_width=True)
 
-        c1, c2 = st.columns([1, 2])
-        with c1:
-            st.info(f"Threshold aktif: **{threshold:.2f}**")
-        with c2:
-            st.write(
-                "Prediksi kelas: **Fraud (1)** jika probabilitas >= threshold, "
-                "selain itu **Non-Fraud (0)**."
-            )
+        st.info(
+            "Aturan kelas: menggunakan default decision rule dari model (sesuai notebook). "
+            "Probabilitas tetap ditampilkan untuk referensi."
+        )
 
         if st.button("Prediksi (CSV)"):
             try:
@@ -285,7 +262,13 @@ with tab2:
                 default_val = float(default_val)
             except Exception:
                 default_val = 0.0
-            return container.number_input(name, value=default_val, step=step, format="%.6f", key=name)
+            return container.number_input(
+                name,
+                value=default_val,
+                step=step,
+                format="%.6f",
+                key=name,
+            )
 
         for i, colname in enumerate(needed):
             container = colA if i % 3 == 0 else (colB if i % 3 == 1 else colC)
@@ -316,5 +299,6 @@ with tab2:
 
 st.divider()
 st.caption(
-    "Catatan: Prediksi kelas ditentukan dari probabilitas model dibandingkan threshold terbaik dari notebook."
+    "Catatan: Kelas prediksi menggunakan default decision rule dari model (model.predict), "
+    "sesuai notebook yang tidak melakukan threshold tuning."
 )
